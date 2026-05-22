@@ -17,6 +17,8 @@
 #include <cpu/cpu.h>
 #include <readline/readline.h>
 #include <readline/history.h>
+#include <memory/paddr.h>
+#include <stdlib.h>
 #include "sdb.h"
 
 static int is_batch_mode = false;
@@ -54,6 +56,114 @@ static int cmd_q(char *args) {
   return -1;
 }
 
+static int cmd_si(char *args) {
+  int n = 1;
+  if (args != NULL) {
+    sscanf(args, "%d", &n);
+  }
+
+  if (n <= 0) {
+    printf("Usage: si [N], N should be a positive integer\n");
+    return 0;
+  }
+
+  cpu_exec(n);
+  return 0;
+}
+
+static int cmd_info(char *args) {
+  if (args == NULL) {
+    printf("Usage: info r\n");
+    return 0;
+  }
+
+  if (strcmp(args, "r") == 0) {
+    isa_reg_display();
+  } else if (strcmp(args, "w") == 0) {
+    display_watchpoints();
+  } 
+  else {
+    printf("Unknown subcommand '%s'\n", args);
+  }
+
+  return 0;
+}
+
+static int cmd_x(char *args) {
+  if (args == NULL) {
+    printf("Usage: x N EXPR\n");
+    return 0;
+  }
+
+  char *n_str = strtok(args, " ");
+  char *expr_str = strtok(NULL, " ");
+
+  if (n_str == NULL || expr_str == NULL) {
+    printf("Usage: x N EXPR\n");
+    return 0;
+  }
+
+  int n = atoi(n_str);
+  if (n <= 0) {
+    printf("N should be a positive integer\n");
+    return 0;
+  }
+
+  paddr_t addr = strtoull(expr_str, NULL, 16);
+
+  for (int i = 0; i < n; i++) {
+    if (i % 4 == 0) {
+      printf("0x%016lx:", (unsigned long)(addr + i * 4));
+    }
+    word_t data = paddr_read(addr + i * 4, 4);
+
+    printf(" 0x%08x", (uint32_t)data);
+    if (i % 4 == 3 || i == n - 1) {
+      printf("\n");
+    }
+  }
+  return 0;
+}
+
+static int cmd_w(char *args) {
+  if (args == NULL) {
+    printf("Usage: w EXPR\n");
+    return 0;
+  }
+
+  new_wp(args);
+  return 0;
+}
+
+static int cmd_p(char *args) {
+  if (args == NULL) {
+    printf("Usage: p EXPR\n");
+    return 0;
+  }
+
+  bool success = false;
+  word_t val = expr(args, &success);
+
+  if (!success) {
+    printf("Bad expression: %s\n", args);
+    return 0;
+  }
+
+  printf(FMT_WORD "\n", val);
+  return 0;
+}
+
+static int cmd_d(char *args) {
+  if (args == NULL) {
+    printf("Usage: d N\n");
+    return 0;
+  }
+
+  int no = atoi(args);
+  free_wp(no);
+  return 0;
+}
+
 static int cmd_help(char *args);
 
 static struct {
@@ -66,7 +176,12 @@ static struct {
   { "q", "Exit NEMU", cmd_q },
 
   /* TODO: Add more commands */
-
+  { "si", "Step N instructions, default N = 1", cmd_si },
+  { "info", "Print program status", cmd_info },
+  { "x", "Examine memory", cmd_x },
+  { "w", "Set a watchpoint", cmd_w },
+  { "d", "Delete a watchpoint", cmd_d },
+  { "p", "Evaluate expression", cmd_p },
 };
 
 #define NR_CMD ARRLEN(cmd_table)

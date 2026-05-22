@@ -19,5 +19,9 @@
 #include <common.h>
 
 word_t expr(char *e, bool *success);
+void display_watchpoints();
+void new_wp(char *expr_str);
+void free_wp(int no);
+bool check_watchpoints();
 
 #endif
